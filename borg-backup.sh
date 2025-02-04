@@ -139,7 +139,7 @@ for B in $BACKUPS; do
 		case $cmd in
 			init)
 				[ "$nargs" -gt 2 ] && usage 64
-				$BORG init --encryption=repokey || rc=$?
+				$BORG init --encryption=$REPOKEY || rc=$?
 			;;
 			create)
 				[ "$nargs" -gt 2 ] && usage 64
