@@ -43,7 +43,8 @@
 
 set -eu
 
-BORG_BACKUP_SH_VERSION="0.7.0"
+BORG_BACKUP_SH_VERSION="0.7.1"
+SH="${0##*/}"
 
 : "${BORG:=/usr/local/bin/borg}"
 : "${CONFIG:=/etc/borg-backup.conf}"
@@ -57,33 +58,43 @@ err() {
 }
 
 usage() {
-	echo "borg-backup.sh $BORG_BACKUP_SH_VERSION"
+	echo
+	echo "* ${SH%%.*} * $BORG_BACKUP_SH_VERSION *"
 	echo
 	echo "Configuration:"
 	echo "  Borg:        $BORG"
 	echo "  Config:      $CONFIG"
 	echo "  Backups:     $BACKUPS"
+		for B in $BACKUPS; do
+			eval "DIRS=\${BACKUP_${B}-}"
+			[ -n "$DIRS" ] && echo "  | ${B}: ${DIRS}"
+		done
 	echo "  Location:    $TARGET"
+	echo "  Encryption:  $REPOKEY"
 	echo "  Compression: $COMPRESSION"
 	echo "  Pruning:     $PRUNE"
+		for B in $BACKUPS; do
+			eval "THIS_PRUNE=\${PRUNE_${B}-}"
+			[ -n "$THIS_PRUNE" ] && echo "  | ${B}: ${THIS_PRUNE}"
+		done     
 	echo
 	echo "Usage:"
-	echo " $0 help"
-	echo " $0 init [BACKUP]"
-	echo " $0 create [BACKUP]"
-	echo " $0 list [BACKUP]"
-	echo " $0 check [BACKUP]"
-	echo " $0 quickcheck [BACKUP]"
-	echo " $0 repocheck [BACKUP]"
-	echo " $0 prune [BACKUP]"
-	echo " $0 compact [BACKUP]"
-	echo " $0 break-lock [BACKUP]"
-	echo " $0 extract BACKUP [borg extract command]"
-	echo " $0 info BACKUP ARCHIVE"
-	echo " $0 delete BACKUP ARCHIVE"
-	echo " $0 borg BACKUP [arbitrary borg command-line]"
+	echo " $SH help"
+	echo " $SH init [BACKUP]"
+	echo " $SH create [BACKUP]"
+	echo " $SH list [BACKUP]"
+	echo " $SH check [BACKUP]"
+	echo " $SH quickcheck [BACKUP]"
+	echo " $SH repocheck [BACKUP]"
+	echo " $SH prune [BACKUP]"
+	echo " $SH compact [BACKUP]"
+	echo " $SH break-lock [BACKUP]"
+	echo " $SH extract BACKUP [borg extract command]"
+	echo " $SH info BACKUP ARCHIVE"
+	echo " $SH delete BACKUP ARCHIVE"
+	echo " $SH borg BACKUP [arbitrary borg command-line]"
 	echo
-	echo " e.g: $0 borg etc extract ::etc-2017-02-21T20:00Z etc/rc.conf --stdout"
+	echo " e.g: $SH borg etc extract ::etc-2017-02-21T20:00Z etc/rc.conf --stdout"
 	echo
 	echo "Use a BACKUP name of '--' to apply a 'borg' command to all backups"
 	exit "$1"
@@ -98,7 +109,12 @@ usage() {
 
 [ -e "$BORG" ]          || err "$BORG not executable (see https://borgbackup.readthedocs.io/en/stable/installation.html)"
 [ -z "$PRUNE" ]         && err "PRUNE not set (e.g. '-H 24 -d 14 -w 8 -m 6')"
-[ -z "${PASSPHRASE-}" ] && err "PASSPHRASE not set (e.g. 'incorrect zebra generator clip')"
+if [ -z "${PASSPHRASE-}" ];then
+	REPOKEY="none"
+else
+	REPOKEY="repokey"
+	export BORG_PASSPHRASE="$PASSPHRASE"
+fi
 [ -z "${TARGET-}" ]     && err "TARGET not set (e.g. 'backup@host:/backup/path')"
 [ -z "${BACKUPS-}" ]    && err "BACKUPS not set (e.g. 'homes etc')"
 
@@ -106,8 +122,6 @@ for B in $BACKUPS; do
 	eval "DIRS=\${BACKUP_${B}-}"
 	[ -z "${DIRS}" ] && err "BACKUP_${B} not set (e.g. '/home/bla -e /home/bla/.foo')"
 done
-
-export BORG_PASSPHRASE="$PASSPHRASE"
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%MZ")
 
