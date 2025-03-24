@@ -30,6 +30,7 @@
 # $ cat >>/etc/borg-backup.conf
 # TARGET=backup@host:/backups
 # PASSPHRASE='incorrect zebra generator clip'
+# PASSPHRASE_homes='incorrect zebra generator clip'
 # BACKUPS='homes etc'
 # BACKUP_homes='/home -e /home/bob/.trash'
 # BACKUP_etc='/etc'
@@ -43,7 +44,7 @@
 
 set -eu
 
-BORG_BACKUP_SH_VERSION="0.7.1"
+BORG_BACKUP_SH_VERSION="0.8.0"
 SH="${0##*/}"
 
 : "${BORG:=/usr/local/bin/borg}"
@@ -51,6 +52,7 @@ SH="${0##*/}"
 COMPRESSION='zstd'
 PRUNE='-H 24 -d 14 -w 8 -m 6'
 COMPACT_THRESHOLD='10'
+SUFFIX=".borg"
 
 err() {
 	echo "$@" 1>&2
@@ -64,14 +66,20 @@ usage() {
 	echo "Configuration:"
 	echo "  Borg:        $BORG"
 	echo "  Config:      $CONFIG"
+	echo "  Location:    $TARGET"
+	echo "  Compression: $COMPRESSION"
+	echo "  Suffix:      $SUFFIX"
 	echo "  Backups:     $BACKUPS"
 		for B in $BACKUPS; do
 			eval "DIRS=\${BACKUP_${B}-}"
 			[ -n "$DIRS" ] && echo "  | ${B}: ${DIRS}"
 		done
-	echo "  Location:    $TARGET"
-	echo "  Encryption:  $REPOKEY"
-	echo "  Compression: $COMPRESSION"
+	[ -z "${PASSPHRASE-}" ] && h="none" || h="repokey"
+	echo "  Encryption:  $h"
+		for B in $BACKUPS; do
+			eval "THIS_PASSPHRASE=\${PASSPHRASE_${B}-}"
+			[ -n "${THIS_PASSPHRASE-}" ] && echo "  | ${B}: ***"
+		done
 	echo "  Pruning:     $PRUNE"
 		for B in $BACKUPS; do
 			eval "THIS_PRUNE=\${PRUNE_${B}-}"
@@ -93,6 +101,7 @@ usage() {
 	echo " $SH info BACKUP ARCHIVE"
 	echo " $SH delete BACKUP ARCHIVE"
 	echo " $SH borg BACKUP [arbitrary borg command-line]"
+	echo " $SH changepass BACKUP PASSPHRASE"
 	echo
 	echo " e.g: $SH borg etc extract ::etc-2017-02-21T20:00Z etc/rc.conf --stdout"
 	echo
@@ -109,12 +118,6 @@ usage() {
 
 [ -e "$BORG" ]          || err "$BORG not executable (see https://borgbackup.readthedocs.io/en/stable/installation.html)"
 [ -z "$PRUNE" ]         && err "PRUNE not set (e.g. '-H 24 -d 14 -w 8 -m 6')"
-if [ -z "${PASSPHRASE-}" ];then
-	REPOKEY="none"
-else
-	REPOKEY="repokey"
-	export BORG_PASSPHRASE="$PASSPHRASE"
-fi
 [ -z "${TARGET-}" ]     && err "TARGET not set (e.g. 'backup@host:/backup/path')"
 [ -z "${BACKUPS-}" ]    && err "BACKUPS not set (e.g. 'homes etc')"
 
@@ -134,8 +137,15 @@ if [ "$#" -gt 0 ]; then shift; fi
 rc=0
 for B in $BACKUPS; do
 	if [ "$nargs" -eq 1 ] || [ "$backup" = "--" ] || [ "$backup" = "$B" ] ; then
-		export BORG_REPO="${TARGET}/${B}.borg"
+		export BORG_REPO="${TARGET}/${B}${SUFFIX}"
 		eval "DIRS=\$BACKUP_${B}"
+		eval "THIS_PASSPHRASE=\${PASSPHRASE_${B}-\${PASSPHRASE-}}"
+		if [ -z "${THIS_PASSPHRASE-}" ];then
+			REPOKEY="none"
+		else
+			REPOKEY="repokey"
+			export BORG_PASSPHRASE="$THIS_PASSPHRASE"
+		fi
 		case $cmd in
 			init)
 				[ "$nargs" -gt 2 ] && usage 64
@@ -188,6 +198,16 @@ for B in $BACKUPS; do
 			break-lock)
 				[ "$nargs" -gt 2 ] && usage 64
 				$BORG break-lock || rc=$?
+			;;
+			changepass)
+				NEW_PASSPHRASE="${1-}"
+				[ "$nargs" -ne 3 ] && [ -z "${THIS_PASSPHRASE-}" ] && [ -z "${NEW_PASSPHRASE-}" ] && usage 64
+				export BORG_NEW_PASSPHRASE="$NEW_PASSPHRASE"
+				t="$(pwd)/borgtemp"
+				cat $CONFIG | grep -v "PASSPHRASE_${B}=" > $t
+				echo "PASSPHRASE_${B}='${NEW_PASSPHRASE}'" >> $t
+				sudo mv $t $CONFIG
+				$BORG key change-passphrase || rc=$?
 			;;
 			borg)
 				[ "$nargs" -lt 2 ] && usage 64

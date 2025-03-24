@@ -18,32 +18,6 @@ Make a borg-backup.conf from the provided template, e.g:
     TARGET=backup@fancy-backup-server:/backups/${HOSTNAME}
     
     ###############################################################################
-    ## Mandatory: A passphrase to derive an encryption key from.
-    ##
-    ## Be wary of permissions on this file.
-    ##
-    PASSPHRASE='ambiguous antelope capacitor paperclip'
-    
-    ###############################################################################
-    ## Optional: Compression
-    ##
-    ## See 'borg help compression' for available options.
-    ##
-    ## This script defaults to zstd as of 0.7.0.
-    ##
-    COMPRESSION='zstd'
-    
-    ###############################################################################
-    ## Optional: Global prune configuration
-    ##
-    PRUNE='-H 24 -d 14 -w 8 -m 6'
-    
-    ###############################################################################
-    ## Optional: Compact threshold in percent
-    ##
-    COMPACT_THRESHOLD='10'
-    
-    ###############################################################################
     ## Mandatory: Backup name list
     ##
     BACKUPS='homes etc'
@@ -55,13 +29,48 @@ Make a borg-backup.conf from the provided template, e.g:
     ##
     BACKUP_homes='/home/freaky -e /home/freaky/Maildir/mutt-cache'
     BACKUP_etc='/etc /usr/local/etc'
+
+    ###############################################################################
+    ## Optional: Global prune configuration
+    ##
+    # PRUNE='-H 24 -d 14 -w 8 -m 6'
     
     ###############################################################################
     ## Optional: Per-backup prune configuration.
     ##
     ## These override the global configuration for individual backups.
     #
-    PRUNE_etc='--keep-hourly=72 --keep-daily=365'
+    # PRUNE_etc='--keep-hourly=72 --keep-daily=365'
+    
+    ###############################################################################
+    ## Optional: A passphrase to derive an encryption key from.
+    ##
+    ## Be wary of permissions on this file.
+    ##
+    # PASSPHRASE='ambiguous antelope capacitor paperclip'
+    ##
+    ## Or override the global password with individual
+    ##
+    # PASSPHRASE_homes='incorrect zebra generator clip'
+    
+    ###############################################################################
+    ## Optional: Compression
+    ##
+    ## See 'borg help compression' for available options.
+    ##
+    ## This script defaults to zstd as of 0.7.0.
+    ##
+    # COMPRESSION='zstd'
+    
+    ###############################################################################
+    ## Optional: Compact threshold in percent
+    ##
+    # COMPACT_THRESHOLD='10'
+    
+    ###############################################################################
+    ## Optional: Suffix for backups name
+    ##
+    # SUFFIX='.borg'
 
 
 This will produce two independent Borg archives.  If using a remote host over SSH,
@@ -106,6 +115,13 @@ Or the repository and the last archive:
 Or only the repository (a purely server-side check):
 
     $ borg-backup.sh repocheck
+
+To change passphrase if repo initialized with (note: global PASSPHRASE if set isn't remove)
+then new passphrase is added and old is removed from config.
+Also need to provide sudo privs while changing to authorize move new config to /etc.
+
+    $ borg-backup.sh changepass
+
 
 For any Borg operation not covered explicitly, borg-backup.sh provides a `borg`
 subcommand, which passes through the argument list to borg, having set up the
